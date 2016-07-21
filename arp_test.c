@@ -5,6 +5,8 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <net/ethernet.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 
 //ARP Header
 #define NETSTAT_IP_ADDR 	19
@@ -51,9 +53,8 @@ int Ethernet_Header_Parsing (const u_char * packet, EthHeader * ethheader){
 	return 0;
 };
 
-int gw_IP_Parsing (const unsigned char * gw_IP) {
+int gw_IP_Parsing (unsigned char * gw_IP) {
 	unsigned char pipe_buf[1024];
-	unsigned char netstat_gw_IP[16];
 	int arp_pipe[2];
 	pid_t pid;
 	int i = 0;
@@ -69,17 +70,19 @@ int gw_IP_Parsing (const unsigned char * gw_IP) {
 		dup2(arp_pipe[1], 1);	// copy pipe for write to stdout
 		close(arp_pipe[0]);		// close for-read fd
 		close(arp_pipe[1]);
-		system("/usr/sbin/netstat -n -r | grep default | awk '{print $2}'");	//In MAC OS, gate
+		system("/bin/netstat -n -r | grep UG | awk '{print $2}'");	//In MAC OS, gate
 		exit(1);
 	}
 
-	else {
+	else {		
 		close(arp_pipe[1]);		// close for-write fd
-
-		read(arp_pipe[0], pipe_buf, 1023);
+		read(arp_pipe[0], pipe_buf, 18);
+		close(arp_pipe[0]);		
 		printf("gateway IP : %s", pipe_buf);
-
-		inet_aton(pipe_buf, gw_IP);
+		
+		inet_aton(pipe_buf, (struct in_addr *)gw_IP);
+		
+		
 	}
 
 	return 0;
@@ -102,17 +105,18 @@ int own_IP_Parsing(const unsigned char * own_IP) {
 		dup2(arp_pipe[1], 1);	// copy pipe for write to stdout
 		close(arp_pipe[0]);		// close for-read fd
 		close(arp_pipe[1]);
-		system("/sbin/ifconfig -a | grep inet | grep broadcast | awk '{print $2}'");
+		system("/sbin/ifconfig -a | grep inet | grep Bcast | awk '{print $2}' | awk -F: '{print $2}'");
 		exit(1);
 	}
 
 	else {
 		close(arp_pipe[1]);		// close for-write fd
-		read(arp_pipe[0], pipe_buf, 1023);
+		read(arp_pipe[0], pipe_buf, 18);
+		close(arp_pipe[0]);
 
-		inet_aton(pipe_buf, own_IP);
-
+		
 		printf("own IP address : %s", pipe_buf);
+		inet_aton(pipe_buf, (struct in_addr *)own_IP);		
 	}
 
 	return 0;
@@ -137,16 +141,18 @@ int own_MAC_Parsing (const unsigned char * own_MACaddr) {
 		dup2(arp_pipe[1], 1);	// copy pipe for write to stdout
 		close(arp_pipe[0]);		// close for-read fd
 		close(arp_pipe[1]);
-		system("/sbin/ifconfig -a | grep ether | awk '{print $2}'");	// ifconfig path in MAC OS X : /sbin/ifconfig
+		system("/sbin/ifconfig -a | grep HWaddr | awk '{print $5}'");	// ifconfig path in MAC OS X : /sbin/ifconfig
 		exit(1);
 	}
 
 	else {
 		close(arp_pipe[1]);		// close for-write fd
-		read(arp_pipe[0], pipe_buf, 1023);
+		
+		read(arp_pipe[0], pipe_buf, 18);
 
-		memcpy(tempMAC, pipe_buf, 17);		
-		memcpy(own_MACaddr, ether_aton(tempMAC), 6);
+	
+		ether_aton_r(pipe_buf, (struct in_addr *)own_MACaddr);
+		printf("own MAC address : %02x:%02x:%02x:%02x:%02x:%02x\n", own_MACaddr[0], own_MACaddr[1], own_MACaddr[2], own_MACaddr[3], own_MACaddr[4], own_MACaddr[5]);
 	}
 
 	return 0;
@@ -280,11 +286,13 @@ int main (int argc, char * argv[]) {
 	
 	printf("Data-link Layer check completed...(type : Ethernet)\n");	
 
-	inet_aton(argv[1], victim_IP);	// Save victim's IP. In MAC OS, there was no inet_aton_r API, which is re_entrant...
-	gw_IP_Parsing(gw_IP);			// using netstat program, get IP address of gateway
-	
+	inet_aton(argv[1], (struct in_addr *) victim_IP);// Save victim's IP. In MAC OS, there was no inet_aton_r API, which is re_entrant...
+
+	gw_IP_Parsing((unsigned char *)gw_IP);			// using netstat program, get IP address of gateway
 	own_IP_Parsing(own_IP);			// using ifconfig program, get IP address of own system
-	own_MAC_Parsing(own_MACaddr);
+
+	own_MAC_Parsing(own_MACaddr);	
+
 	Make_ARP_Packet(arp_packet, own_MACaddr, own_IP, broadcastMAC, victim_IP, ARP_REQEST); // With this Request, get vicim's MAC address...
 
 	while (1) {
@@ -306,7 +314,7 @@ int main (int argc, char * argv[]) {
 
 		if ( memcmp(&packet[28], victim_IP, 4) == 0) {
 			memcpy(victim_MACaddr, ethheader.srcMACaddr, 6);
-			printf("victim_MAC address : %02x:%02x:%02x:%02x:%02x:%02x\n", victim_MACaddr[0], victim_MACaddr[1], victim_MACaddr[2], victim_MACaddr[3], victim_MACaddr[4], victim_MACaddr[5],victim_MACaddr[6]);
+			printf("victim_MAC address : %02x:%02x:%02x:%02x:%02x:%02x\n", victim_MACaddr[0], victim_MACaddr[1], victim_MACaddr[2], victim_MACaddr[3], victim_MACaddr[4], victim_MACaddr[5]);
 			break;
 		}
 
@@ -326,7 +334,6 @@ int main (int argc, char * argv[]) {
 
 	return 0;
 }
-
 
 
 
