@@ -312,10 +312,10 @@ int main (int argc, char * argv[]) {
 
 	}
 
-	printf("Sending forged ARP REPLY packet...(disguising as gateway)\n");	
+	printf("Sending INFECTION ARP REPLY packet...(disguising as gateway)\n");	
 	Make_ARP_Packet (arp_packet, own_MACaddr, gw_IP, victim_MACaddr, victim_IP, ARP_REPLY);	
 
-	printf("[ ARP REPLY PACKET INFO(FORGED) ]\n");
+	printf("[ ARP INFECTION PACKET INFO ]\n");
 	PrintPacket(arp_packet, sizeof(arp_packet));
 
 	while (1) {
